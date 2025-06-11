@@ -9,8 +9,9 @@ all_meta.tsv
 test_*.tsv
 test_*.txt
 
-# 结果目录（可选择性上传）
-results/
+# 结果目录（排除实际结果，但包含说明文档）
+results/*
+!results/README.md
 
 # Python缓存文件
 __pycache__/
