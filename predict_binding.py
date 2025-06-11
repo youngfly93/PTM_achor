@@ -7,6 +7,34 @@ HLA结合预测模块 - 使用MHCflurry预测肽段与HLA-I的结合能力，并
 import warnings
 warnings.filterwarnings('ignore')
 
+# 控制TensorFlow和其他库的日志级别
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # 只显示错误信息
+os.environ['MHCFLURRY_DEFAULT_PREDICT_BATCH_SIZE'] = '256'  # 减少批处理频率
+import logging
+logging.getLogger('tensorflow').setLevel(logging.ERROR)
+logging.getLogger('mhcflurry').setLevel(logging.ERROR)  # 改为ERROR级别
+logging.getLogger('keras').setLevel(logging.ERROR)
+logging.getLogger('numpy').setLevel(logging.ERROR)
+
+# 抑制进度条和详细输出
+import sys
+from contextlib import contextmanager
+
+@contextmanager
+def suppress_mhcflurry_output():
+    """抑制MHCflurry的详细输出"""
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    try:
+        with open(os.devnull, 'w') as devnull:
+            # 不完全重定向，只过滤特定的输出
+            pass
+        yield
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
 from hla_manager import HLAManager
 
 def get_mhcflurry_predictor():
@@ -58,12 +86,16 @@ def top_allele(seq, alleles, predictor=None):
         predictor: MHCflurry预测器实例
     
     Returns:
-        tuple: (最佳等位基因, presentation_score)
+        tuple: (最佳等位基因, presentation_score) 或 (None, 0.0) 如果无法预测
     """
+    if not alleles:
+        print(f"Warning: No alleles provided for peptide {seq}")
+        return None, 0.0
+    
     if predictor is None:
         predictor = get_mhcflurry_predictor()
         if predictor is None:
-            return alleles[0], 0.0  # fallback
+            return None, 0.0  # 无法预测
     
     try:
         results = predictor.predict(
@@ -72,16 +104,34 @@ def top_allele(seq, alleles, predictor=None):
             include_affinity_percentile=True
         )
         
-        if len(results) == 0:
-            return alleles[0], 0.0
+        if results is None or len(results) == 0:
+            print(f"Warning: No prediction results for {seq}")
+            return None, 0.0
+        
+        # 检查结果中是否有必要的列
+        if 'presentation_score' not in results.columns:
+            print(f"Warning: presentation_score not in results for {seq}")
+            return None, 0.0
         
         # 按presentation_score排序（高分更好）
         best = results.sort_values("presentation_score", ascending=False).iloc[0]
-        return best["allele"], best["presentation_score"]
+        
+        # 安全地获取allele值
+        if 'allele' in best:
+            best_allele = best["allele"]
+        else:
+            # 如果没有allele列，使用第一个输入的等位基因
+            best_allele = alleles[0]
+            
+        return best_allele, best.get("presentation_score", 0.0)
     
+    except KeyError as e:
+        print(f"Error predicting binding for {seq}: KeyError - {e}")
+        print(f"Available columns: {results.columns.tolist() if 'results' in locals() and hasattr(results, 'columns') else 'Unknown'}")
+        return None, 0.0
     except Exception as e:
-        print(f"Error predicting binding for {seq}: {e}")
-        return alleles[0], 0.0
+        print(f"Error predicting binding for {seq}: {type(e).__name__} - {e}")
+        return None, 0.0
 
 def annotate_anchor_positions(seq, allele=None):
     """
@@ -215,8 +265,8 @@ def batch_predict_binding(peptides, alleles_list, use_mhcflurry=True, hla_manage
             use_mhcflurry = False
     
     for i, peptide in enumerate(peptides):
-        if (i + 1) % 100 == 0:
-            print(f"Processed {i + 1}/{len(peptides)} peptides...")
+        if (i + 1) % 500 == 0 or i == 0:
+            print(f"Processed {i + 1}/{len(peptides)} peptides ({((i + 1)/len(peptides)*100):.1f}%)")
         
         seq = peptide['Sequence']
         seq_length = len(seq)
@@ -234,8 +284,13 @@ def batch_predict_binding(peptides, alleles_list, use_mhcflurry=True, hla_manage
             best_allele, score = top_allele(seq, compatible_alleles, predictor)
         else:
             # 简化评分：基于肽段长度和组成
-            best_allele = compatible_alleles[0]
-            score = len(seq) * 0.1  # 简单评分
+            best_allele = compatible_alleles[0] if compatible_alleles else None
+            score = len(seq) * 0.1 if best_allele else 0.0  # 简单评分
+        
+        # 如果无法确定等位基因，跳过此肽段
+        if best_allele is None:
+            print(f"Skipping peptide {seq}: no valid allele prediction")
+            continue
         
         # 标注锚位
         anchors = annotate_anchor_positions(seq, best_allele)

@@ -70,27 +70,21 @@ def process_sample(sample_record, use_mhcflurry=False, hla_manager=None):
     sample_type = sample_record['type']
     hla_alleles_str = sample_record['HLA_alleles']
     
-    print(f"  Processing sample: {sample_name} ({sample_type})")
-    print(f"    Spectra file: {Path(spectra_path).name}")
-    
     # 检查文件是否存在
     if not os.path.exists(spectra_path):
-        print(f"    Warning: Spectra file not found, skipping: {spectra_path}")
+        print(f"        Warning: Spectra file not found, skipping")
         return []
     
     # 解析HLA等位基因（使用HLA管理器）
     alleles = parse_allele_string(hla_alleles_str, hla_manager)
     if not alleles:
-        print(f"    Warning: No valid HLA alleles found, using population defaults")
         alleles = hla_manager.suggest_alleles_for_population('European')[:3]
     
     # 提取肽段
     peptides = load_one(spectra_path, min_length=8, max_length=11)
     if not peptides:
-        print(f"    Warning: No peptides found in {spectra_path}")
+        print(f"        Warning: No peptides found")
         return []
-    
-    print(f"    Found {len(peptides)} unique 8-11mer peptides")
     
     # 分析修饰-锚位耦合（使用HLA管理器）
     coupling_records = tag_anchor_modifications(peptides, alleles, use_mhcflurry, hla_manager)
@@ -100,12 +94,6 @@ def process_sample(sample_record, use_mhcflurry=False, hla_manager=None):
         record['sample'] = sample_name
         record['dataset'] = sample_record['dataset']
         record['group'] = sample_type
-    
-    # 显示修饰统计
-    mod_stats = get_modification_stats(peptides)
-    print(f"    Modified peptides: {mod_stats['modified_peptides']}")
-    print(f"    Unmodified peptides: {mod_stats['unmodified_peptides']}")
-    print(f"    Coupling records generated: {len(coupling_records)}")
     
     return coupling_records
 
@@ -166,20 +154,38 @@ def run_pipeline(meta_file="all_meta.tsv",
     tumor_records = []
     normal_records = []
     
-    for i, sample_record in enumerate(metadata):
-        print(f"  Processing sample {i+1}/{len(metadata)}:")
+    # 按数据集分组处理
+    datasets = {}
+    for record in metadata:
+        dataset = record['dataset']
+        if dataset not in datasets:
+            datasets[dataset] = []
+        datasets[dataset].append(record)
+    
+    sample_counter = 0
+    for dataset_idx, (dataset_name, samples) in enumerate(datasets.items()):
+        print(f"  Dataset {dataset_idx+1}/{len(datasets)}: {dataset_name} ({len(samples)} samples)")
         
-        coupling_records = process_sample(sample_record, use_mhcflurry, hla_manager)
-        
-        if coupling_records:
-            all_coupling_records.extend(coupling_records)
+        for sample_idx, sample_record in enumerate(samples):
+            sample_counter += 1
+            print(f"    Sample {sample_idx+1}/{len(samples)} ({sample_counter}/{len(metadata)}): {sample_record['sample']} ({sample_record['type']})")
             
-            # 按组分类
-            if sample_record['type'] == 'Tumor':
-                tumor_records.extend(coupling_records)
-            elif sample_record['type'] == 'Normal':
-                normal_records.extend(coupling_records)
+            coupling_records = process_sample(sample_record, use_mhcflurry, hla_manager)
+            
+            if coupling_records:
+                all_coupling_records.extend(coupling_records)
+                
+                # 按组分类
+                if sample_record['type'] == 'Tumor':
+                    tumor_records.extend(coupling_records)
+                elif sample_record['type'] == 'Normal':
+                    normal_records.extend(coupling_records)
+                    
+                print(f"      -> Generated {len(coupling_records)} coupling records")
+            else:
+                print(f"      -> No records generated")
         
+        print(f"  Dataset {dataset_name} completed. Total records so far: {len(all_coupling_records)}")
         print()
     
     print(f"Total coupling records: {len(all_coupling_records)}")
