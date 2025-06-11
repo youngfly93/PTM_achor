@@ -1,0 +1,12 @@
+# HLA Alleles Configuration
+# Format: dataset_name:sample_pattern:HLA_alleles
+# Example configurations (需要根据实际HLA typing结果更新)
+
+# 默认配置 - 常见欧洲人群HLA型号
+default:*:A*02:01,B*07:02,C*07:02
+
+# 数据集特定配置示例
+# PXD000394:HCC1143:A*01:01,B*08:01,C*07:01
+# PXD000394:HCC1937:A*02:01,B*15:01,C*03:04
+
+# 更多配置可以在这里添加...
