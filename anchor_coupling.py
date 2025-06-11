@@ -6,21 +6,26 @@
 
 from extract_peptides import load_one, extract_mod_type
 from predict_binding import parse_allele_string, batch_predict_binding
+from hla_manager import HLAManager
 
-def tag_anchor_modifications(peptides, alleles, use_mhcflurry=True):
+def tag_anchor_modifications(peptides, alleles, use_mhcflurry=True, hla_manager=None):
     """
-    为肽段标注修饰与锚位的耦合关系
+    为肽段标注修饰与锚位的耦合关系（集成HLA管理器）
     
     Args:
         peptides: 肽段列表 [{'Sequence': str, 'mod_list': list}, ...]
         alleles: HLA等位基因列表
         use_mhcflurry: 是否使用MHCflurry预测
+        hla_manager: HLA管理器实例
     
     Returns:
         list: 修饰-锚位耦合记录
     """
+    if hla_manager is None:
+        hla_manager = HLAManager()
+    
     # 首先进行HLA结合预测
-    binding_results = batch_predict_binding(peptides, alleles, use_mhcflurry)
+    binding_results = batch_predict_binding(peptides, alleles, use_mhcflurry, hla_manager)
     
     coupling_records = []
     

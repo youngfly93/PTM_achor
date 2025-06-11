@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
 HLA结合预测模块 - 使用MHCflurry预测肽段与HLA-I的结合能力，并标注锚位
+集成HLA参考集管理，支持更多等位基因和长度组合
 """
 
 import warnings
 warnings.filterwarnings('ignore')
+
+from hla_manager import HLAManager
 
 def get_mhcflurry_predictor():
     """获取MHCflurry预测器"""
@@ -159,37 +162,49 @@ def validate_hla_allele(allele):
     pattern = r'^[ABC]\*\d{2}:\d{2}$'
     return bool(re.match(pattern, allele))
 
-def parse_allele_string(allele_string):
+def parse_allele_string(allele_string, hla_manager=None):
     """
-    解析HLA等位基因字符串
+    解析HLA等位基因字符串（集成HLA管理器）
     
     Args:
         allele_string: 逗号分隔的HLA等位基因字符串，如"A*02:01,B*07:02,C*07:02"
+        hla_manager: HLA管理器实例
     
     Returns:
         list: HLA等位基因列表
     """
-    alleles = [allele.strip() for allele in allele_string.split(',')]
-    valid_alleles = [allele for allele in alleles if validate_hla_allele(allele)]
+    if hla_manager is None:
+        hla_manager = HLAManager()
     
-    if len(valid_alleles) != len(alleles):
-        invalid = set(alleles) - set(valid_alleles)
-        print(f"Warning: Invalid HLA alleles detected: {invalid}")
+    valid_alleles, invalid_alleles = hla_manager.validate_allele_string(allele_string)
+    
+    if invalid_alleles:
+        print(f"Warning: Invalid HLA alleles detected: {invalid_alleles}")
+        print(f"Using valid alleles: {valid_alleles}")
+    
+    # 如果没有有效的等位基因，使用推荐的默认值
+    if not valid_alleles:
+        print("No valid alleles found, using European population defaults")
+        valid_alleles = hla_manager.suggest_alleles_for_population('European')[:3]
     
     return valid_alleles
 
-def batch_predict_binding(peptides, alleles_list, use_mhcflurry=True):
+def batch_predict_binding(peptides, alleles_list, use_mhcflurry=True, hla_manager=None):
     """
-    批量预测肽段与HLA的结合
+    批量预测肽段与HLA的结合（集成HLA管理器）
     
     Args:
         peptides: 肽段信息列表 [{'Sequence': str, 'mod_list': list}, ...]
         alleles_list: HLA等位基因列表
         use_mhcflurry: 是否使用MHCflurry（如果False，使用简化评分）
+        hla_manager: HLA管理器实例
     
     Returns:
         list: 预测结果列表
     """
+    if hla_manager is None:
+        hla_manager = HLAManager()
+    
     results = []
     predictor = None
     
@@ -204,12 +219,22 @@ def batch_predict_binding(peptides, alleles_list, use_mhcflurry=True):
             print(f"Processed {i + 1}/{len(peptides)} peptides...")
         
         seq = peptide['Sequence']
+        seq_length = len(seq)
+        
+        # 过滤支持当前肽段长度的等位基因
+        compatible_alleles = hla_manager.filter_alleles_for_length(alleles_list, seq_length)
+        
+        if not compatible_alleles:
+            # 如果没有兼容的等位基因，使用所有等位基因
+            compatible_alleles = alleles_list
+            if i == 0:  # 只在第一次警告
+                print(f"Warning: No alleles support {seq_length}mer peptides, using all alleles")
         
         if use_mhcflurry:
-            best_allele, score = top_allele(seq, alleles_list, predictor)
+            best_allele, score = top_allele(seq, compatible_alleles, predictor)
         else:
             # 简化评分：基于肽段长度和组成
-            best_allele = alleles_list[0]  # 使用第一个等位基因
+            best_allele = compatible_alleles[0]
             score = len(seq) * 0.1  # 简单评分
         
         # 标注锚位
@@ -220,17 +245,31 @@ def batch_predict_binding(peptides, alleles_list, use_mhcflurry=True):
             'best_allele': best_allele,
             'binding_score': score,
             'anchor_positions': anchors,
-            'modifications': peptide['mod_list']
+            'modifications': peptide['mod_list'],
+            'compatible_alleles': len(compatible_alleles)
         })
     
     return results
 
 def main():
     """测试函数"""
+    # 创建HLA管理器
+    hla_manager = HLAManager()
+    
+    print("HLA Manager Test:")
+    print(f"Loaded {len(hla_manager.get_all_alleles())} alleles")
+    print(f"Supported lengths: {hla_manager.get_supported_lengths()}")
+    print()
+    
     # 测试HLA等位基因解析
-    test_alleles = "A*02:01,B*07:02,C*07:02"
-    alleles = parse_allele_string(test_alleles)
-    print(f"Parsed alleles: {alleles}")
+    test_alleles = "HLA-A*02:01,B*07:02,C*07:02,A*99:99"
+    alleles = parse_allele_string(test_alleles, hla_manager)
+    print(f"Parsed alleles from '{test_alleles}': {alleles}")
+    print()
+    
+    # 测试人群特异性推荐
+    european_alleles = hla_manager.suggest_alleles_for_population('European')[:3]
+    print(f"European population alleles: {european_alleles}")
     
     # 测试锚位标注
     test_sequences = ["KFKESFAEM", "RILEMNDKYVK", "ADMAHISGL"]
@@ -244,17 +283,20 @@ def main():
     peptides = [
         {'Sequence': 'KFKESFAEM', 'mod_list': [(9, 'Oxidation[M]')]},
         {'Sequence': 'RILEMNDKYVK', 'mod_list': []},
-        {'Sequence': 'ADMAHISGL', 'mod_list': []}
+        {'Sequence': 'ADMAHISGL', 'mod_list': []},
+        {'Sequence': 'PEPTIDE', 'mod_list': []},  # 7mer - 不支持
+        {'Sequence': 'LONGERPEPTIDE', 'mod_list': []}  # 13mer - 不支持
     ]
     
-    print("\nTesting batch prediction (simplified):")
-    results = batch_predict_binding(peptides, alleles, use_mhcflurry=False)
+    print("\nTesting batch prediction with HLA manager:")
+    results = batch_predict_binding(peptides, alleles, use_mhcflurry=False, hla_manager=hla_manager)
     
     for result in results:
-        print(f"Sequence: {result['sequence']}")
+        print(f"Sequence: {result['sequence']} (length: {len(result['sequence'])})")
         print(f"  Best allele: {result['best_allele']}")
         print(f"  Score: {result['binding_score']:.3f}")
         print(f"  Anchors: {sorted(result['anchor_positions'])}")
+        print(f"  Compatible alleles: {result['compatible_alleles']}")
         print(f"  Modifications: {result['modifications']}")
         print()
 

@@ -23,6 +23,7 @@ from predict_binding import parse_allele_string, batch_predict_binding
 from anchor_coupling import tag_anchor_modifications, export_coupling_records
 from stats_plot import enrichment_analysis, export_enrichment_results, compare_anchor_vs_non_anchor, generate_text_violin_plot
 from compare_groups import compare_groups, export_group_comparison_results, summarize_group_differences, create_comparison_report
+from hla_manager import HLAManager
 
 def load_metadata(meta_file):
     """
@@ -50,17 +51,20 @@ def load_metadata(meta_file):
     
     return metadata
 
-def process_sample(sample_record, use_mhcflurry=False):
+def process_sample(sample_record, use_mhcflurry=False, hla_manager=None):
     """
-    处理单个样本
+    处理单个样本（集成HLA管理器）
     
     Args:
         sample_record: 样本元数据记录
         use_mhcflurry: 是否使用MHCflurry预测
+        hla_manager: HLA管理器实例
     
     Returns:
         list: 该样本的耦合记录
     """
+    if hla_manager is None:
+        hla_manager = HLAManager()
     sample_name = sample_record['sample']
     spectra_path = sample_record['spectra']
     sample_type = sample_record['type']
@@ -74,11 +78,11 @@ def process_sample(sample_record, use_mhcflurry=False):
         print(f"    Warning: Spectra file not found, skipping: {spectra_path}")
         return []
     
-    # 解析HLA等位基因
-    alleles = parse_allele_string(hla_alleles_str)
+    # 解析HLA等位基因（使用HLA管理器）
+    alleles = parse_allele_string(hla_alleles_str, hla_manager)
     if not alleles:
-        print(f"    Warning: No valid HLA alleles found, using defaults")
-        alleles = ['A*02:01', 'B*07:02', 'C*07:02']
+        print(f"    Warning: No valid HLA alleles found, using population defaults")
+        alleles = hla_manager.suggest_alleles_for_population('European')[:3]
     
     # 提取肽段
     peptides = load_one(spectra_path, min_length=8, max_length=11)
@@ -88,8 +92,8 @@ def process_sample(sample_record, use_mhcflurry=False):
     
     print(f"    Found {len(peptides)} unique 8-11mer peptides")
     
-    # 分析修饰-锚位耦合
-    coupling_records = tag_anchor_modifications(peptides, alleles, use_mhcflurry)
+    # 分析修饰-锚位耦合（使用HLA管理器）
+    coupling_records = tag_anchor_modifications(peptides, alleles, use_mhcflurry, hla_manager)
     
     # 添加样本信息
     for record in coupling_records:
@@ -151,6 +155,13 @@ def run_pipeline(meta_file="all_meta.tsv",
     
     # 2. 处理所有样本
     print("Step 2: Processing samples...")
+    
+    # 初始化HLA管理器
+    hla_manager = HLAManager()
+    print(f"  Loaded HLA reference set: {len(hla_manager.get_all_alleles())} alleles")
+    print(f"  Supported lengths: {hla_manager.get_supported_lengths()}")
+    print()
+    
     all_coupling_records = []
     tumor_records = []
     normal_records = []
@@ -158,7 +169,7 @@ def run_pipeline(meta_file="all_meta.tsv",
     for i, sample_record in enumerate(metadata):
         print(f"  Processing sample {i+1}/{len(metadata)}:")
         
-        coupling_records = process_sample(sample_record, use_mhcflurry)
+        coupling_records = process_sample(sample_record, use_mhcflurry, hla_manager)
         
         if coupling_records:
             all_coupling_records.extend(coupling_records)
