@@ -37,23 +37,28 @@ pip install mhcflurry logomaker  # 可选：用于更精确的HLA预测
 ```bash
 # 构建元数据文件
 python3 build_meta_simple.py
+
+# 使用HLA参考集更新HLA等位基因配置
+python3 update_hla_config.py
 ```
 
 这将生成：
-- `all_meta.tsv`：包含所有样本的元数据
-- `hla_alleles_config.txt`：HLA等位基因配置模板
+- `all_meta.tsv`：包含所有样本的元数据（默认HLA）
+- `all_meta_updated.tsv`：基于HLA参考集的更新版本
+- `all_meta_test.tsv`：测试用的小数据集
+- `hla_reference_stats.txt`：HLA参考集统计信息
 
 ### 3. 运行分析
 
 ```bash
-# 测试模式（前5个样本）
-python3 run_pipeline.py --test
+# 测试模式（使用HLA参考集）
+python3 run_pipeline.py --meta all_meta_test.tsv --test
 
-# 完整分析
-python3 run_pipeline.py
+# 完整分析（使用更新的HLA配置）
+python3 run_pipeline.py --meta all_meta_updated.tsv
 
 # 使用MHCflurry预测（需要先安装）
-python3 run_pipeline.py --mhcflurry
+python3 run_pipeline.py --meta all_meta_updated.tsv --mhcflurry
 
 # 自定义参数
 python3 run_pipeline.py --meta custom_meta.tsv --output custom_results --limit 100
@@ -104,13 +109,19 @@ python3 run_pipeline.py --meta custom_meta.tsv --output custom_results --limit 1
 cancer_datasets_links/
 ├── setup_env.sh              # 环境设置脚本
 ├── build_meta_simple.py      # 元数据构建工具
+├── hla_manager.py            # HLA管理模块（新增）
+├── hla_ref_set.class_i.txt   # HLA参考位点文件（新增）
+├── update_hla_config.py      # HLA配置更新工具（新增）
 ├── extract_peptides.py       # 肽段提取模块
-├── predict_binding.py        # HLA结合预测模块
-├── anchor_coupling.py        # 修饰-锚位耦合分析
+├── predict_binding.py        # HLA结合预测模块（已更新）
+├── anchor_coupling.py        # 修饰-锚位耦合分析（已更新）
 ├── stats_plot.py            # 统计检验和可视化
 ├── compare_groups.py         # 组间差异分析
-├── run_pipeline.py          # 主运行脚本
-├── all_meta.tsv             # 样本元数据
+├── run_pipeline.py          # 主运行脚本（已更新）
+├── all_meta.tsv             # 样本元数据（默认HLA）
+├── all_meta_updated.tsv     # 更新的HLA配置
+├── all_meta_test.tsv        # 测试数据集
+├── hla_reference_stats.txt  # HLA统计信息
 ├── results/                 # 分析结果目录
 └── [dataset]_human/         # 原始数据目录
     └── *.spectra           # pFind分析结果
@@ -119,12 +130,32 @@ cancer_datasets_links/
 ## ⚙️ 配置选项
 
 ### HLA等位基因配置
-更新`all_meta.tsv`中的`HLA_alleles`列，或使用HLA typing工具：
+
+#### 🆕 使用HLA参考集（推荐）
+项目现已集成27个常见HLA等位基因参考集：
 
 ```bash
-# 示例HLA配置
-A*02:01,B*07:02,C*07:02  # 欧洲人群常见型号
-A*01:01,B*08:01,C*07:01  # 其他常见组合
+# 自动更新HLA配置
+python3 update_hla_config.py
+
+# 查看支持的等位基因
+python3 hla_manager.py
+```
+
+支持的等位基因：
+- **HLA-A**: A*01:01, A*02:01, A*03:01, A*24:02, A*11:01等（16个）
+- **HLA-B**: B*07:02, B*08:01, B*15:01, B*44:02, B*58:01等（11个）
+- **肽段长度**: 8-11mer全支持
+
+#### 人群特异性推荐
+- **欧洲人群**: A*02:01, A*01:01, A*03:01, B*07:02, B*08:01
+- **亚洲人群**: A*24:02, A*11:01, A*33:01, B*58:01, B*15:01  
+- **非洲人群**: A*30:01, A*68:01, A*23:01, B*53:01, B*58:01
+
+#### 手动配置
+```bash
+# 编辑all_meta.tsv中的HLA_alleles列
+A*02:01,B*07:02,A*24:02  # 自定义组合
 ```
 
 ### 预测方法选择
