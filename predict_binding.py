@@ -199,7 +199,7 @@ def get_hla_motif_anchors(allele, peptide_length):
 
 def validate_hla_allele(allele):
     """
-    验证HLA等位基因名称格式
+    验证HLA等位基因名称格式（仅支持A和B类）
     
     Args:
         allele: HLA等位基因名称
@@ -208,8 +208,8 @@ def validate_hla_allele(allele):
         bool: 是否为有效格式
     """
     import re
-    # 标准HLA命名格式：A*02:01, B*07:02, C*07:02等
-    pattern = r'^[ABC]\*\d{2}:\d{2}$'
+    # 仅支持A和B类HLA等位基因：A*02:01, B*07:02等
+    pattern = r'^[AB]\*\d{2}:\d{2}$'
     return bool(re.match(pattern, allele))
 
 def parse_allele_string(allele_string, hla_manager=None):

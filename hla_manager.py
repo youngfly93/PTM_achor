@@ -58,17 +58,23 @@ class HLAManager:
             self._load_default_alleles()
     
     def _load_default_alleles(self):
-        """加载默认的HLA等位基因"""
+        """加载默认的HLA等位基因（仅A和B类）"""
+        # 从hla_ref_set.class_i.txt文件中提取的所有A和B类等位基因
         default_alleles = [
-            'A*02:01', 'A*01:01', 'A*03:01', 'A*24:02', 'A*11:01',
-            'B*07:02', 'B*08:01', 'B*15:01', 'B*35:01', 'B*44:02',
-            'C*07:02', 'C*07:01', 'C*06:02', 'C*03:04', 'C*04:01'
+            # HLA-A类等位基因
+            'A*01:01', 'A*02:01', 'A*02:03', 'A*02:06', 'A*03:01',
+            'A*11:01', 'A*23:01', 'A*24:02', 'A*26:01', 'A*30:01',
+            'A*30:02', 'A*31:01', 'A*32:01', 'A*33:01', 'A*68:01', 'A*68:02',
+            # HLA-B类等位基因
+            'B*07:02', 'B*08:01', 'B*15:01', 'B*35:01', 'B*40:01',
+            'B*44:02', 'B*44:03', 'B*51:01', 'B*53:01', 'B*57:01', 'B*58:01'
         ]
         
         for allele in default_alleles:
             self.hla_alleles.add(allele)
             family = allele.split('*')[0]
-            self.allele_families[family].append(allele)
+            if allele not in self.allele_families[family]:
+                self.allele_families[family].append(allele)
         
         self.supported_lengths = {8, 9, 10, 11}
         
@@ -116,7 +122,7 @@ class HLAManager:
     
     def validate_allele_string(self, allele_string):
         """
-        验证和标准化HLA等位基因字符串
+        验证和标准化HLA等位基因字符串（仅支持A和B类）
         
         Args:
             allele_string: 逗号分隔的HLA等位基因字符串
@@ -133,7 +139,12 @@ class HLAManager:
             if allele.startswith('HLA-'):
                 allele = allele[4:]
             
-            if allele in self.hla_alleles:
+            # 过滤C类等位基因
+            if allele.startswith('C*'):
+                invalid_alleles.append(allele)
+                continue
+            
+            if allele in self.hla_alleles and (allele.startswith('A*') or allele.startswith('B*')):
                 valid_alleles.append(allele)
             else:
                 invalid_alleles.append(allele)
@@ -152,7 +163,7 @@ class HLAManager:
         """
         representative = []
         
-        for family in ['A', 'B', 'C']:
+        for family in ['A', 'B']:  # 仅支持A和B类
             family_alleles = self.get_alleles_by_family(family)
             representative.extend(family_alleles[:max_per_family])
         
@@ -189,27 +200,24 @@ class HLAManager:
         populations = {
             'European': [
                 'A*02:01', 'A*01:01', 'A*03:01', 'A*24:02',
-                'B*07:02', 'B*08:01', 'B*44:02', 'B*35:01',
-                'C*07:02', 'C*07:01'
+                'B*07:02', 'B*08:01', 'B*44:02', 'B*35:01'
             ],
             'Asian': [
                 'A*24:02', 'A*02:01', 'A*11:01', 'A*33:01',
-                'B*58:01', 'B*15:01', 'B*44:03', 'B*51:01',
-                'C*07:02', 'C*03:04'
+                'B*58:01', 'B*15:01', 'B*44:03', 'B*51:01'
             ],
             'African': [
                 'A*30:01', 'A*68:01', 'A*02:01', 'A*23:01',
-                'B*53:01', 'B*15:01', 'B*58:01', 'B*07:02',
-                'C*07:02', 'C*06:02'
+                'B*53:01', 'B*15:01', 'B*58:01', 'B*07:02'
             ]
         }
         
         suggested = populations.get(population, populations['European'])
         
-        # 过滤出实际支持的等位基因
+        # 过滤出实际支持的等位基因（仅A和B类）
         valid_alleles = []
         for allele in suggested:
-            if allele in self.hla_alleles:
+            if allele in self.hla_alleles and (allele.startswith('A*') or allele.startswith('B*')):
                 valid_alleles.append(allele)
         
         return valid_alleles

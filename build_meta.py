@@ -67,7 +67,8 @@ def build_metadata(root_path):
                 "sample": sample_name,
                 "type": sample_type,
                 "spectra": str(spectra_file),
-                "HLA_alleles": "A*02:01,B*07:02,C*07:02"  # 默认HLA型号，实际使用时需要更新
+                "batch_id": dataset_name,  # 使用dataset作为batch_id
+                "HLA_alleles": "A*02:01,A*01:01,B*07:02"  # 默认HLA型号（仅A和B类），实际使用时需要更新
             })
     
     # 创建DataFrame
@@ -103,12 +104,12 @@ def main():
 # Format: dataset_name:sample_pattern:HLA_alleles
 # Example configurations (需要根据实际HLA typing结果更新)
 
-# 默认配置 - 常见欧洲人群HLA型号
-default:*:A*02:01,B*07:02,C*07:02
+# 默认配置 - 常见欧洲人群HLA型号（仅A和B类）
+default:*:A*02:01,A*01:01,B*07:02
 
-# 数据集特定配置示例
-# PXD000394:HCC1143:A*01:01,B*08:01,C*07:01
-# PXD000394:HCC1937:A*02:01,B*15:01,C*03:04
+# 数据集特定配置示例（仅A和B类）
+# PXD000394:HCC1143:A*01:01,A*03:01,B*08:01
+# PXD000394:HCC1937:A*02:01,A*24:02,B*15:01
 
 # 更多配置可以在这里添加...
 """)
@@ -116,10 +117,11 @@ default:*:A*02:01,B*07:02,C*07:02
     
     print("\n" + "="*50)
     print("IMPORTANT NOTES:")
-    print("1. HLA alleles are set to default values (A*02:01,B*07:02,C*07:02)")
-    print("2. Please update HLA_alleles column with actual HLA typing results")
-    print("3. Sample type classification is heuristic - please verify manually")
-    print("4. You can use OptiType, HLA-HD, or other tools for HLA typing from WES/RNA-seq data")
+    print("1. HLA alleles are set to default values (A*02:01,A*01:01,B*07:02)")
+    print("2. Only HLA-A and HLA-B classes are supported (HLA-C excluded)")
+    print("3. Please update HLA_alleles column with actual HLA typing results")
+    print("4. Sample type classification is heuristic - please verify manually")
+    print("5. You can use OptiType, HLA-HD, or other tools for HLA typing from WES/RNA-seq data")
     print("="*50)
 
 if __name__ == "__main__":
